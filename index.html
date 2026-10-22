@@ -516,7 +516,7 @@
         let imageUrl;
         try {
           if (relativeAsset) {
-            imageUrl = new URL(encodeURIComponent(relativeAsset[1]), "https://cdn.jsdelivr.net/gh/salahelfarissi/iav-campus-geoportal@main/assets/img/popup/");
+            imageUrl = new URL("assets/img/popup/" + encodeURIComponent(relativeAsset[1]), window.location.href);
           } else {
             imageUrl = new URL(raw, window.location.href);
           }
@@ -660,7 +660,7 @@
         });
       }
       async function loadSource(source) {
-        const response = await fetch("./data/" + encodeURIComponent(source.file));
+        const response = await fetch("./data/" + encodeURIComponent(source.file), { cache: "no-cache" });
         if (!response.ok) throw new Error(source.file + " returned HTTP " + response.status);
         const data = await response.json();
         if (!data || !["FeatureCollection", "Feature"].includes(data.type)) {
