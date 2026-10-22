@@ -75,6 +75,15 @@
     .legend-swatch { width: 10px; height: 10px; flex: 0 0 auto; border: 1px solid #34443d66; border-radius: 3px; }
     .legend-swatch.marker { border: 2px solid #fff; border-radius: 50%; box-shadow: 0 0 0 1px #34443d66; }
     .legend-swatch.line { height: 0; border: 0; border-top: 3px solid; border-radius: 0; }
+    .basemap-select { width: 100%; min-height: 38px; padding: 0 10px; color: var(--ink); background: #fafcfb; border: 1px solid var(--border); border-radius: 8px; }
+    .basemap-editor { display: grid; gap: 8px; margin-top: 11px; padding: 11px; background: #f7f9f7; border: 1px solid var(--border); border-radius: 9px; }
+    .basemap-editor[hidden] { display: none; }
+    .basemap-editor label { color: #41514a; font-size: 10px; font-weight: 750; }
+    .basemap-editor input { width: 100%; min-height: 36px; padding: 0 9px; color: var(--ink); background: #fff; border: 1px solid var(--border); border-radius: 7px; }
+    .basemap-editor p, .basemap-note { margin: 0; color: var(--muted); font-size: 10px; line-height: 1.5; }
+    .basemap-editor a { color: var(--green-dark); }
+    .basemap-editor .actions { margin-top: 2px; }
+    .basemap-label { display: block; margin: 0 0 8px; color: #41514a; font-size: 11px; font-weight: 750; }
     .landmark-list { display: grid; gap: 7px; }
     .landmark-button { display: flex; width: 100%; align-items: center; gap: 9px; padding: 8px 9px; color: #34443d; text-align: left; background: transparent; border: 0; border-radius: 8px; cursor: pointer; font-size: 11px; font-weight: 600; }
     .landmark-button:hover { background: #f1f6f2; }
@@ -96,6 +105,7 @@
     .leaflet-popup-content-wrapper { border-radius: 10px; }
     .leaflet-popup-content { margin: 12px 15px; font-family: inherit; }
     .popup-title { margin: 0 0 5px; color: var(--ink); font-size: 13px; font-weight: 750; }
+    .popup-image { display: block; width: min(220px, 100%); max-height: 150px; margin-top: 8px; border-radius: 7px; object-fit: cover; }
     .popup-row { margin: 3px 0; color: #58665f; font-size: 10px; line-height: 1.45; overflow-wrap: anywhere; }
     .popup-row b { color: #34443d; }
     .loading { position: absolute; z-index: 400; bottom: 16px; left: 16px; padding: 8px 11px; color: #40534a; background: #ffffffec; border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 3px 12px #18342812; font-size: 10px; }
@@ -160,19 +170,38 @@
           <button class="landmark-button" type="button" data-landmark="kasbah"><span class="dot purple" aria-hidden="true"></span>Kasbah of the Udayas</button>
         </div>
       </section>
+      <section class="section" aria-labelledby="basemap-title">
+        <h2 class="section-heading" id="basemap-title">Choose a basemap</h2>
+        <label class="basemap-label" for="basemap-select">Tile provider</label>
+        <select class="basemap-select" id="basemap-select">
+          <option value="osm">OpenStreetMap</option>
+          <option value="stamen">Stamen Terrain (via Stadia Maps)</option>
+          <option value="thunderforest">Thunderforest Atlas</option>
+          <option value="mapbox">Mapbox Streets</option>
+        </select>
+        <p class="basemap-note">OpenStreetMap works without a key. Stamen styles are hosted by Stadia Maps; the other providers require their own API key.</p>
+        <form class="basemap-editor" id="basemap-editor" hidden>
+          <label id="basemap-key-label" for="basemap-key">Provider API key</label>
+          <input id="basemap-key" type="password" autocomplete="new-password" spellcheck="false">
+          <p id="basemap-key-state" aria-live="polite"></p>
+          <p>Keys are saved only in this browser and sent directly to the selected tile provider when loading tiles. <a id="basemap-signup" href="#" target="_blank" rel="noopener noreferrer">Get an API key</a>.</p>
+          <div class="actions">
+            <button class="button" type="submit">Save key &amp; use basemap</button>
+            <button class="button outline" id="clear-basemap-key" type="button">Remove saved key</button>
+          </div>
+        </form>
+      </section>
       <section class="section" aria-labelledby="tools-title">
         <h2 class="section-heading" id="tools-title">Map tools</h2>
         <div class="actions">
           <button class="button" id="campus-view" type="button">Go to campus</button>
           <button class="button outline" id="city-view" type="button">Rabat city view</button>
-          <label class="button outline" for="geojson-input">Add GeoJSON</label>
-          <input id="geojson-input" type="file" accept=".geojson,.json,application/geo+json,application/json" multiple hidden>
         </div>
         <p class="map-note">Zooming out stops at the Rabat city view (level 13); zooming in and panning remain available.</p>
         <p class="status" id="status" role="status" aria-live="polite">Loading IAV campus data…</p>
       </section>
       <footer class="footer">
-        Map © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap contributors</a>.<br>
+        Basemap tiles and attribution are provided by the selected tile service.<br>
         Campus datasets are GeoJSON; 3D building heights are displayed as 2D footprints.
       </footer>
     </aside>
@@ -198,7 +227,13 @@
       const legendList = document.getElementById("legend-list");
       const search = document.getElementById("place-search");
       const searchResults = document.getElementById("search-results");
-      const imported = L.featureGroup();
+      const basemapSelect = document.getElementById("basemap-select");
+      const basemapEditor = document.getElementById("basemap-editor");
+      const basemapKeyInput = document.getElementById("basemap-key");
+      const basemapKeyLabel = document.getElementById("basemap-key-label");
+      const basemapKeyState = document.getElementById("basemap-key-state");
+      const basemapSignup = document.getElementById("basemap-signup");
+      const clearBasemapKeyButton = document.getElementById("clear-basemap-key");
       const map = L.map("map", { center: CITY, zoom: 13, minZoom: 13, maxZoom: 19, zoomControl: true }).setView(CITY, 13);
       const dataLayers = new Map();
       const searchableFeatures = [];
@@ -238,13 +273,137 @@
         { id: "iav3D", label: "Buildings (3D footprints)", file: "iav3D.geojson", color: palette.buildings, checked: true }
       ];
 
-      // OSM base tiles with the requested zoom and attribution.
-      L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
-        maxZoom: 19,
-        minZoom: 13,
-        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-        crossOrigin: true
-      }).addTo(map);
+      const basemaps = {
+        osm: {
+          label: "OpenStreetMap",
+          attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+          tileUrl: () => "https://tile.openstreetmap.org/{z}/{x}/{y}.png"
+        },
+        stamen: {
+          label: "Stamen Terrain (via Stadia Maps)",
+          signupUrl: "https://client.stadiamaps.com/signup/",
+          attribution: '&copy; <a href="https://stadiamaps.com/">Stadia Maps</a>, &copy; <a href="https://stamen.com/">Stamen Design</a>, &copy; <a href="https://openmaptiles.org/">OpenMapTiles</a>, &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+          tileUrl: key => "https://tiles.stadiamaps.com/tiles/stamen_terrain/{z}/{x}/{y}{r}.png?api_key=" + encodeURIComponent(key)
+        },
+        thunderforest: {
+          label: "Thunderforest Atlas",
+          signupUrl: "https://manage.thunderforest.com/",
+          attribution: '&copy; <a href="https://www.thunderforest.com/">Thunderforest</a>, &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+          tileUrl: key => "https://tile.thunderforest.com/atlas/{z}/{x}/{y}.png?apikey=" + encodeURIComponent(key)
+        },
+        mapbox: {
+          label: "Mapbox Streets",
+          signupUrl: "https://account.mapbox.com/access-tokens/",
+          attribution: '&copy; <a href="https://www.mapbox.com/about/maps/">Mapbox</a>, &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+          tileUrl: key => "https://api.mapbox.com/styles/v1/mapbox/streets-v12/tiles/256/{z}/{x}/{y}?access_token=" + encodeURIComponent(key)
+        }
+      };
+      const basemapKeyPrefix = "iav-campus-geoportal-basemap-key-";
+      let activeBasemap = null;
+      let activeBasemapId = "osm";
+
+      function createBasemapLayer(id, key) {
+        const provider = basemaps[id];
+        return L.tileLayer(provider.tileUrl(key), {
+          minZoom: 13,
+          maxZoom: 19,
+          attribution: provider.attribution,
+          crossOrigin: true
+        });
+      }
+      function activateBasemap(id, key) {
+        const nextBasemap = createBasemapLayer(id, key);
+        let reportedTileError = false;
+        nextBasemap.on("tileerror", () => {
+          if (activeBasemap !== nextBasemap || reportedTileError) return;
+          reportedTileError = true;
+          status.textContent = "Could not load " + basemaps[id].label + " tiles. Check the provider key or try another basemap.";
+        });
+        if (activeBasemap) map.removeLayer(activeBasemap);
+        activeBasemap = nextBasemap;
+        activeBasemapId = id;
+        activeBasemap.addTo(map);
+        if (id === "osm") status.textContent = "OpenStreetMap basemap active.";
+        else status.textContent = basemaps[id].label + " basemap active.";
+      }
+      function readBasemapKey(id) {
+        try {
+          return localStorage.getItem(basemapKeyPrefix + id) || "";
+        } catch (error) {
+          basemapKeyState.textContent = "Browser storage is unavailable; this provider key cannot be saved locally.";
+          return null;
+        }
+      }
+      function updateBasemapEditor() {
+        const id = basemapSelect.value;
+        const provider = basemaps[id];
+        basemapEditor.hidden = id === "osm";
+        if (id === "osm") return;
+        basemapKeyLabel.textContent = provider.label + " API key";
+        basemapSignup.href = provider.signupUrl;
+        const savedKey = readBasemapKey(id);
+        clearBasemapKeyButton.hidden = !savedKey;
+        if (savedKey !== null) {
+          basemapKeyState.textContent = savedKey
+            ? "A key is saved in this browser. Saving a new key will replace it."
+            : "A key is required. The current basemap stays active until you save one.";
+        }
+      }
+      function selectBasemap(id) {
+        if (id === "osm") {
+          activateBasemap(id, "");
+          return;
+        }
+        const key = readBasemapKey(id);
+        if (key === null) return;
+        if (!key.trim()) {
+          updateBasemapEditor();
+          basemapKeyInput.focus();
+          return;
+        }
+        activateBasemap(id, key.trim());
+      }
+      activateBasemap("osm", "");
+      updateBasemapEditor();
+      basemapSelect.addEventListener("change", () => {
+        updateBasemapEditor();
+        selectBasemap(basemapSelect.value);
+      });
+      basemapEditor.addEventListener("submit", event => {
+        event.preventDefault();
+        const id = basemapSelect.value;
+        const key = basemapKeyInput.value.trim();
+        if (id === "osm" || !key) {
+          basemapKeyState.textContent = "Enter a non-empty API key to use this basemap.";
+          basemapKeyInput.focus();
+          return;
+        }
+        try {
+          localStorage.setItem(basemapKeyPrefix + id, key);
+        } catch (error) {
+          basemapKeyState.textContent = "Could not save this key in browser storage. Check your browser privacy settings.";
+          return;
+        }
+        basemapKeyInput.value = "";
+        updateBasemapEditor();
+        activateBasemap(id, key);
+      });
+      clearBasemapKeyButton.addEventListener("click", () => {
+        const id = basemapSelect.value;
+        try {
+          localStorage.removeItem(basemapKeyPrefix + id);
+        } catch (error) {
+          basemapKeyState.textContent = "Could not remove the saved key from browser storage.";
+          return;
+        }
+        if (activeBasemapId === id) {
+          basemapSelect.value = "osm";
+          activateBasemap("osm", "");
+        }
+        basemapKeyInput.value = "";
+        updateBasemapEditor();
+        status.textContent = "Saved " + basemaps[id].label + " key removed from this browser.";
+      });
 
       function esc(value) {
         return String(value).replace(/[&<>"']/g, character => ({
@@ -350,15 +509,43 @@
         if (source.id === "iav3D") return buildingCategory(feature);
         return areaCategory(source, feature);
       }
-      function popupContent(feature, fallback) {
+      function popupImageUrl(value) {
+        if (typeof value !== "string" || !value.trim()) return null;
+        const raw = value.trim().replace(/\\/g, "/");
+        const relativeAsset = raw.match(/^(?:\.\/|\/)?assets\/img\/popup\/([^/?#]+)$/i);
+        let imageUrl;
+        try {
+          if (relativeAsset) {
+            imageUrl = new URL(encodeURIComponent(relativeAsset[1]), "https://cdn.jsdelivr.net/gh/salahelfarissi/iav-campus-geoportal@main/assets/img/popup/");
+          } else {
+            imageUrl = new URL(raw, window.location.href);
+          }
+        } catch (error) {
+          return null;
+        }
+        if (!["http:", "https:"].includes(imageUrl.protocol) || imageUrl.username || imageUrl.password) return null;
+        return imageUrl.href;
+      }
+      function popupContent(feature) {
         const props = feature && feature.properties ? feature.properties : {};
-        const title = props.name || props.label || props.category || props.group || fallback || "Campus feature";
-        const rows = Object.entries(props)
-          .filter(([key, value]) => value !== null && value !== "" && key !== "fid")
-          .slice(0, 7)
-          .map(([key, value]) => '<p class="popup-row"><b>' + esc(key.replaceAll("_", " ")) + ":</b> " + esc(displayValue(value)) + "</p>")
-          .join("");
-        return '<div class="popup-title">' + esc(title) + "</div>" + rows;
+        const title = String(props.name || props.label || "").trim() || "Campus feature";
+        const content = document.createElement("div");
+        const heading = document.createElement("div");
+        heading.className = "popup-title";
+        heading.textContent = title;
+        content.appendChild(heading);
+        const imageUrl = popupImageUrl(props.image);
+        if (imageUrl) {
+          const image = document.createElement("img");
+          image.className = "popup-image";
+          image.src = imageUrl;
+          image.alt = "Photo of " + title;
+          image.loading = "lazy";
+          image.referrerPolicy = "no-referrer";
+          image.addEventListener("error", () => image.remove(), { once: true });
+          content.appendChild(image);
+        }
+        return content;
       }
       function getPointName(feature) {
         const p = feature.properties || {};
@@ -372,15 +559,6 @@
           weight: 1.4,
           fillColor: category.color,
           fillOpacity: .96
-        });
-      }
-      function importedPointToLayer(feature, latlng) {
-        return L.circleMarker(latlng, {
-          radius: 5,
-          color: "#fff",
-          weight: 1.5,
-          fillColor: "#89558f",
-          fillOpacity: .94
         });
       }
       function styleFor(source) {
@@ -493,7 +671,7 @@
           style: styleFor(source),
           pointToLayer: source.id === "points_iav" ? pointToLayer : undefined,
           onEachFeature(feature, featureLayer) {
-            featureLayer.bindPopup(popupContent(feature, source.label), { maxWidth: 300 });
+            featureLayer.bindPopup(popupContent(feature), { maxWidth: 300 });
             addSearchEntry(feature, featureLayer, source);
           }
         });
@@ -506,16 +684,16 @@
 
       // Distinct Rabat examples demonstrate markers, circles, polygons, and popups.
       const tower = L.marker([34.0242, -6.8227]).addTo(map);
-      tower.bindPopup('<div class="popup-title">Hassan Tower</div><p class="popup-row">Historic minaret and Rabat landmark, beside the Mausoleum of Mohammed V.</p>');
+      tower.bindPopup('<div class="popup-title">Hassan Tower</div>');
       const chellah = L.circle([34.0067, -6.8265], {
         radius: 350, color: "#cb8550", weight: 2, fillColor: "#dfa16f", fillOpacity: .22
       }).addTo(map);
-      chellah.bindPopup('<div class="popup-title">Chellah</div><p class="popup-row">Historic fortified necropolis in Rabat.</p>');
+      chellah.bindPopup('<div class="popup-title">Chellah</div>');
       const kasbah = L.polygon([
         [34.03305, -6.83775], [34.0328, -6.83565], [34.03085, -6.83495],
         [34.03035, -6.83635], [34.0311, -6.83815]
       ], { color: "#8171aa", weight: 2, fillColor: "#9989bf", fillOpacity: .23 }).addTo(map);
-      kasbah.bindPopup('<div class="popup-title">Kasbah of the Udayas</div><p class="popup-row">Historic kasbah overlooking the Bou Regreg and Atlantic coast.</p>');
+      kasbah.bindPopup('<div class="popup-title">Kasbah of the Udayas</div>');
       // Demonstrate a standalone map popup, then open the marker popup on load.
       L.popup().setLatLng(CITY).setContent('<div class="popup-title">Welcome to Rabat</div><p class="popup-row">Explore the IAV campus and the city landmarks.</p>').openOn(map);
       tower.openPopup();
@@ -591,37 +769,6 @@
           target.openPopup();
           status.textContent = "Showing " + button.textContent.trim() + ".";
         });
-      });
-
-      // Users can add their own GeoJSON from local files without uploading it.
-      document.getElementById("geojson-input").addEventListener("change", async event => {
-        const files = Array.from(event.target.files || []);
-        if (!files.length) return;
-        imported.clearLayers();
-        let count = 0;
-        try {
-          for (const file of files) {
-            const json = JSON.parse(await file.text());
-            if (!json || !["Feature", "FeatureCollection"].includes(json.type)) {
-              throw new Error(file.name + " is not a GeoJSON Feature or FeatureCollection.");
-            }
-            const layer = L.geoJSON(json, {
-              pointToLayer: importedPointToLayer,
-              style: { color: "#89558f", weight: 2, fillColor: "#a77bad", fillOpacity: .24 },
-              onEachFeature(feature, featureLayer) {
-                featureLayer.bindPopup(popupContent(feature, file.name));
-              }
-            });
-            imported.addLayer(layer);
-            count += json.type === "FeatureCollection" ? json.features.length : 1;
-          }
-          imported.addTo(map);
-          if (imported.getBounds().isValid()) map.fitBounds(imported.getBounds(), { padding: [28, 28], maxZoom: 18 });
-          status.textContent = "Added " + count + " feature" + (count === 1 ? "" : "s") + " from " + files.length + " local file" + (files.length === 1 ? "" : "s") + ".";
-        } catch (error) {
-          status.textContent = "Could not add GeoJSON: " + error.message;
-        }
-        event.target.value = "";
       });
 
       // Click anywhere on the map to inspect its latitude and longitude.
