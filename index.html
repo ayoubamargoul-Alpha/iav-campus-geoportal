@@ -66,6 +66,15 @@
     .layer-swatch { width: 11px; height: 11px; flex: 0 0 auto; border-radius: 3px; }
     .layer-label { flex: 1; color: #34443d; font-size: 11px; font-weight: 600; }
     .layer-count { min-width: 24px; padding: 2px 5px; color: #718078; background: #f0f3f0; border-radius: 10px; font-size: 9px; text-align: center; }
+    .legend { color: #43534b; font-size: 10px; }
+    .legend summary { color: var(--green-dark); cursor: pointer; font-size: 11px; font-weight: 750; }
+    .legend-list { display: grid; gap: 9px; padding-top: 11px; }
+    .legend-group { display: grid; gap: 4px; }
+    .legend-layer { margin: 0 0 2px; color: #617067; font-size: 9px; font-weight: 750; }
+    .legend-item { display: flex; align-items: center; gap: 7px; min-width: 0; color: #526159; font-size: 9px; line-height: 1.35; }
+    .legend-swatch { width: 10px; height: 10px; flex: 0 0 auto; border: 1px solid #34443d66; border-radius: 3px; }
+    .legend-swatch.marker { border: 2px solid #fff; border-radius: 50%; box-shadow: 0 0 0 1px #34443d66; }
+    .legend-swatch.line { height: 0; border: 0; border-top: 3px solid; border-radius: 0; }
     .landmark-list { display: grid; gap: 7px; }
     .landmark-button { display: flex; width: 100%; align-items: center; gap: 9px; padding: 8px 9px; color: #34443d; text-align: left; background: transparent; border: 0; border-radius: 8px; cursor: pointer; font-size: 11px; font-weight: 600; }
     .landmark-button:hover { background: #f1f6f2; }
@@ -77,6 +86,7 @@
     .button:hover { background: #dfece3; }
     .button.outline { color: #53625b; background: #fff; border-color: var(--border); }
     .status { min-height: 36px; margin: 10px 0 0; padding: 8px 10px; color: #526159; background: #f5f7f5; border-radius: 8px; font-size: 10px; line-height: 1.5; overflow-wrap: anywhere; }
+    .map-note { margin: 8px 0 0; color: var(--muted); font-size: 10px; line-height: 1.45; }
     .footer { margin-top: auto; padding-top: 12px; color: #79857f; border-top: 1px solid var(--border); font-size: 9px; line-height: 1.6; }
     .footer a { color: var(--green); }
     .map-frame { position: relative; min-width: 0; min-height: 350px; background: #e9eeea; }
@@ -137,6 +147,10 @@
           <button class="text-button" id="all-layers" type="button">Show all</button>
         </div>
         <div class="layer-list" id="layer-list"></div>
+        <details class="legend">
+          <summary>Map legend · categories from feature attributes</summary>
+          <div class="legend-list" id="legend-list"></div>
+        </details>
       </section>
       <section class="section" aria-labelledby="landmarks-title">
         <h2 class="section-heading" id="landmarks-title">Rabat landmarks</h2>
@@ -154,6 +168,7 @@
           <label class="button outline" for="geojson-input">Add GeoJSON</label>
           <input id="geojson-input" type="file" accept=".geojson,.json,application/geo+json,application/json" multiple hidden>
         </div>
+        <p class="map-note">Zooming out stops at the Rabat city view (level 13); zooming in and panning remain available.</p>
         <p class="status" id="status" role="status" aria-live="polite">Loading IAV campus data…</p>
       </section>
       <footer class="footer">
@@ -180,19 +195,41 @@
       const status = document.getElementById("status");
       const loading = document.getElementById("loading");
       const layerList = document.getElementById("layer-list");
+      const legendList = document.getElementById("legend-list");
       const search = document.getElementById("place-search");
       const searchResults = document.getElementById("search-results");
       const imported = L.featureGroup();
-      const map = L.map("map", { center: CITY, zoom: 13, zoomControl: true }).setView(CITY, 13);
+      const map = L.map("map", { center: CITY, zoom: 13, minZoom: 13, maxZoom: 19, zoomControl: true }).setView(CITY, 13);
       const dataLayers = new Map();
       const searchableFeatures = [];
       const palette = {
-        points: "#28765e",
-        roads: "#506475",
-        grass: "#5a9b69",
-        terrain: "#be9860",
-        buildings: "#557da0"
+        points: "#2767a8",
+        roads: "#536779",
+        grass: "#4b9659",
+        terrain: "#b9823e",
+        buildings: "#72569b"
       };
+      const pointColors = {
+        tree: "#3d8b40", palmier: "#709d38", grass: "#a0ae3b",
+        admin: "#7654a8", departments: "#2962a3", sport: "#d87532",
+        food: "#bd513d", amphitheater: "#8f5aa5", service: "#168577",
+        room: "#526982", game: "#b37d24", bde: "#ca5c79",
+        biblio: "#436f91", cap: "#6d7952", cda: "#1f8991",
+        health: "#bd4a4a", onssa: "#8b6a36", prayer: "#766450",
+        press: "#4e7f63", study: "#9b648f",
+        administration: "#7654a8", amphitheatre: "#8f5aa5", amphitheatres: "#aa6e9d",
+        bibliotheque: "#436f91", buvettes: "#bd513d", "cda et salle d etude": "#1f8991",
+        divers: "#526982", "equipement sportif": "#d87532", formation: "#2962a3",
+        internat: "#b27945", restaus: "#c1793d", residence: "#a45c4c",
+        sante: "#bd4a4a", services: "#168577", structures: "#62768a",
+        "vie associative": "#ca5c79"
+      };
+      const buildingColors = {
+        amphi: "#8064a2", bloc: "#62768a", class: "#3979a8", desk: "#4f917d",
+        food: "#c1793d", formation: "#337f71", lab: "#3f77a8",
+        residence: "#b27945", sport: "#38895e", structure: "#686f7c"
+      };
+      const areaScale = 111320 * 111320 * Math.cos(CITY[0] * Math.PI / 180);
       const sources = [
         { id: "points_iav", label: "Places & facilities", file: "points_iav.geojson", color: palette.points, checked: true },
         { id: "roads", label: "Campus roads & paths", file: "roads.geojson", color: palette.roads, checked: true },
@@ -204,6 +241,7 @@
       // OSM base tiles with the requested zoom and attribution.
       L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
         maxZoom: 19,
+        minZoom: 13,
         attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
         crossOrigin: true
       }).addTo(map);
@@ -218,9 +256,103 @@
         if (typeof value === "object") return JSON.stringify(value);
         return String(value);
       }
+      function normalizeCategory(value) {
+        return String(value || "").trim().toLocaleLowerCase()
+          .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+          .replace(/[^a-z0-9]+/g, " ").trim();
+      }
+      function categoryLabel(value) {
+        return String(value || "").trim().replace(/[_-]+/g, " ")
+          .replace(/\b[a-z]/g, character => character.toLocaleUpperCase());
+      }
+      function safeColor(value, fallback) {
+        const color = String(value || "").trim();
+        if (/^#[0-9a-f]{6}$/i.test(color)) return color;
+        if (/^[0-9a-f]{6}$/i.test(color)) return "#" + color;
+        return fallback;
+      }
+      function pointCategory(feature) {
+        const props = feature.properties || {};
+        const group = String(props.grouping || "").trim();
+        const department = String(props.department || "").trim();
+        const naturalType = normalizeCategory(props.name);
+        const value = group || department || (["tree", "palmier", "grass"].includes(naturalType) ? props.name : "");
+        if (!value) return { key: "place", label: "Other campus places", color: palette.points };
+        const key = normalizeCategory(value);
+        const color = pointColors[key] || pointColors[key.replace(/ /g, "")] || palette.points;
+        return {
+          key: (group ? "group:" : department ? "department:" : "type:") + key,
+          label: categoryLabel(value),
+          color
+        };
+      }
+      function roadCategory(feature) {
+        const props = feature.properties || {};
+        const raw = props.category || props.grouping || "Campus path";
+        const normalized = normalizeCategory(raw);
+        const kind = normalized.includes("princip") ? "principal"
+          : normalized.includes("second") ? "secondary"
+            : normalized.includes("piste") ? "piste" : normalized;
+        const fallback = { principal: "#2d3942", secondary: "#506475", piste: "#859aad" }[kind] || palette.roads;
+        return {
+          key: kind,
+          label: { principal: "Principal road", secondary: "Secondary road", piste: "Piste" }[kind] || categoryLabel(raw),
+          color: safeColor(props.color, fallback)
+        };
+      }
+      function buildingCategory(feature) {
+        const props = feature.properties || {};
+        const group = String(props.group || "").trim();
+        const key = normalizeCategory(group);
+        return {
+          key: key || normalizeCategory(props.name) || "building",
+          label: group ? categoryLabel(group) : (props.name || "Other building"),
+          color: safeColor(props.color, buildingColors[key] || palette.buildings)
+        };
+      }
+      function polygonArea(feature) {
+        const props = feature.properties || {};
+        const storedArea = Number(props.Shape_Area);
+        if (Number.isFinite(storedArea) && storedArea > 0) return storedArea * areaScale;
+        const geometry = feature.geometry || {};
+        const polygons = geometry.type === "Polygon" ? [geometry.coordinates]
+          : geometry.type === "MultiPolygon" ? geometry.coordinates : [];
+        let squareDegrees = 0;
+        for (const polygon of polygons) {
+          const ringArea = ring => {
+            let sum = 0;
+            for (let i = 0; i < ring.length; i++) {
+              const current = ring[i];
+              const next = ring[(i + 1) % ring.length];
+              sum += current[0] * next[1] - next[0] * current[1];
+            }
+            return Math.abs(sum) / 2;
+          };
+          squareDegrees += Math.max(0, ringArea(polygon[0]) - polygon.slice(1).reduce((sum, ring) => sum + ringArea(ring), 0));
+        }
+        return squareDegrees * areaScale;
+      }
+      function areaCategory(source, feature) {
+        const area = polygonArea(feature);
+        const size = area < 500 ? "small" : area < 2500 ? "medium" : "large";
+        const grassColors = { small: "#a7d89c", medium: "#74ba75", large: "#438e59" };
+        const terrainColors = { small: "#f3d28b", medium: "#dfad5b", large: "#bd813a" };
+        const labels = { small: "Small area · under 500 m²", medium: "Medium area · 500–2,500 m²", large: "Large area · over 2,500 m²" };
+        return {
+          key: size,
+          label: labels[size],
+          color: source.id === "grass" ? grassColors[size] : terrainColors[size]
+        };
+      }
+      function legendCategory(source, feature) {
+        if (source.id === "points_iav") return pointCategory(feature);
+        if (source.id === "roads") return roadCategory(feature);
+        if (source.id === "iav3D") return buildingCategory(feature);
+        return areaCategory(source, feature);
+      }
       function popupContent(feature, fallback) {
         const props = feature && feature.properties ? feature.properties : {};
-        const title = props.name || props.label || props.category || fallback || "Campus feature";
+        const title = props.name || props.label || props.category || props.group || fallback || "Campus feature";
         const rows = Object.entries(props)
           .filter(([key, value]) => value !== null && value !== "" && key !== "fid")
           .slice(0, 7)
@@ -233,36 +365,86 @@
         return p.name || p.label || p.department || p.grouping || "Unnamed campus place";
       }
       function pointToLayer(feature, latlng) {
+        const category = pointCategory(feature);
+        return L.circleMarker(latlng, {
+          radius: category.key === "type:tree" ? 3.5 : category.key === "type:palmier" ? 4.5 : 5.5,
+          color: "#fff",
+          weight: 1.4,
+          fillColor: category.color,
+          fillOpacity: .96
+        });
+      }
+      function importedPointToLayer(feature, latlng) {
         return L.circleMarker(latlng, {
           radius: 5,
           color: "#fff",
           weight: 1.5,
-          fillColor: palette.points,
+          fillColor: "#89558f",
           fillOpacity: .94
         });
       }
       function styleFor(source) {
         if (source.id === "roads") {
-          return feature => ({
-            color: feature.properties && feature.properties.color || palette.roads,
-            weight: Math.max(2, Math.min(5, Number(feature.properties && feature.properties.width) || 3)),
-            opacity: .82
-          });
+          return feature => {
+            const category = roadCategory(feature);
+            const kind = category.key;
+            return {
+              color: category.color,
+              weight: Math.max(2, Math.min(6, Number(feature.properties && feature.properties.width) || 3)),
+              opacity: .9,
+              dashArray: kind === "piste" ? "5 6" : undefined
+            };
+          };
         }
         if (source.id === "iav3D") {
-          return feature => ({
-            color: feature.properties && feature.properties.color || palette.buildings,
-            weight: 1.2,
-            fillColor: feature.properties && feature.properties.color || palette.buildings,
-            fillOpacity: .5
-          });
+          return feature => {
+            const category = buildingCategory(feature);
+            return {
+              color: category.color,
+              weight: 1.2,
+              fillColor: category.color,
+              fillOpacity: .58
+            };
+          };
         }
-        return {
-          color: source.color,
-          weight: 1.5,
-          fillColor: source.color,
-          fillOpacity: source.id === "grass" ? .24 : .19
+        return feature => {
+          const category = areaCategory(source, feature);
+          return {
+            color: source.id === "grass" ? "#3c7445" : "#8b632e",
+            weight: 1.5,
+            fillColor: category.color,
+            fillOpacity: source.id === "grass" ? .42 : .34
+          };
         };
+      }
+      function renderLegend(source, features) {
+        const categories = new Map();
+        features.forEach(feature => {
+          const category = legendCategory(source, feature);
+          const existing = categories.get(category.key);
+          if (existing) existing.count++;
+          else categories.set(category.key, { ...category, count: 1 });
+        });
+        if (!categories.size) return;
+        const group = document.createElement("div");
+        group.className = "legend-group";
+        const heading = document.createElement("p");
+        heading.className = "legend-layer";
+        heading.textContent = source.label;
+        group.appendChild(heading);
+        for (const category of categories.values()) {
+          const row = document.createElement("div");
+          row.className = "legend-item";
+          const swatch = document.createElement("span");
+          swatch.className = "legend-swatch" + (source.id === "points_iav" ? " marker" : source.id === "roads" ? " line" : "");
+          if (source.id === "roads") swatch.style.borderTopColor = category.color;
+          else swatch.style.backgroundColor = category.color;
+          const label = document.createElement("span");
+          label.textContent = category.label + " · " + category.count;
+          row.append(swatch, label);
+          group.appendChild(row);
+        }
+        legendList.appendChild(group);
       }
       function renderLayerControl(source, count) {
         let row = document.getElementById("layer-" + source.id);
@@ -306,6 +488,7 @@
         if (!data || !["FeatureCollection", "Feature"].includes(data.type)) {
           throw new Error(source.file + " is not a GeoJSON Feature or FeatureCollection.");
         }
+        const features = data.type === "FeatureCollection" ? data.features : [data];
         const layer = L.geoJSON(data, {
           style: styleFor(source),
           pointToLayer: source.id === "points_iav" ? pointToLayer : undefined,
@@ -317,6 +500,7 @@
         dataLayers.set(source.id, { layer, source, count: data.type === "FeatureCollection" ? data.features.length : 1 });
         if (source.checked) layer.addTo(map);
         renderLayerControl(source, data.type === "FeatureCollection" ? data.features.length : 1);
+        renderLegend(source, features);
         return data.type === "FeatureCollection" ? data.features.length : 1;
       }
 
@@ -422,7 +606,7 @@
               throw new Error(file.name + " is not a GeoJSON Feature or FeatureCollection.");
             }
             const layer = L.geoJSON(json, {
-              pointToLayer,
+              pointToLayer: importedPointToLayer,
               style: { color: "#89558f", weight: 2, fillColor: "#a77bad", fillOpacity: .24 },
               onEachFeature(feature, featureLayer) {
                 featureLayer.bindPopup(popupContent(feature, file.name));
